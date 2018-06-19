@@ -38,7 +38,7 @@ public class SchemaReader {
             Relationship firstMemdexPath = realmTemplateNode.getSingleRelationship(RelationshipTypes.MEMDEXPATH, Direction.OUTGOING);
             if (firstMemdexPath != null) {
                 Node segment = firstMemdexPath.getEndNode();
-                Optional<MemdexPathNode> memdexPathNode = SchemaReader.readMemdexPath(segment, onlyUnamanagedCounters, countersDefinitionBuilder);
+                Optional<MemdexPathNode> memdexPathNode = SchemaReader.readMemdexPath(segment, name, onlyUnamanagedCounters, countersDefinitionBuilder);
                 if (!memdexPathNode.isPresent()) {
                     LOGGER.warn("No counter for realm '{}'. Realm is ignored.", name);
                 }
@@ -62,14 +62,14 @@ public class SchemaReader {
         }
     }
 
-    static Optional<MemdexPathNode> readMemdexPath(Node segment, boolean onlyUnamanagedCounters, CountersDefinition.Builder countersDefinitionBuilder) {
+    static Optional<MemdexPathNode> readMemdexPath(Node segment, String realmName, boolean onlyUnamanagedCounters, CountersDefinition.Builder countersDefinitionBuilder) {
         String segmentName = segment.getProperty("path").toString();
 
-        List<String> counters = readAllCounters(segment, onlyUnamanagedCounters, countersDefinitionBuilder);
+        List<String> counters = readAllCounters(segment, realmName, onlyUnamanagedCounters, countersDefinitionBuilder);
 
         List<MemdexPathNode> children = Lists.newArrayList();
         segment.getRelationships(RelationshipTypes.MEMDEXPATH, Direction.OUTGOING).forEach(path -> {
-            readMemdexPath(path.getEndNode(), onlyUnamanagedCounters, countersDefinitionBuilder)
+            readMemdexPath(path.getEndNode(), realmName, onlyUnamanagedCounters, countersDefinitionBuilder)
                     .ifPresent(children::add);
         });
 
@@ -80,23 +80,23 @@ public class SchemaReader {
         return Optional.of(new MemdexPathNode(segmentName, attribute, counters, children));
     }
 
-    private static ImmutableList<String> readAllCounters(Node segment, boolean onlyUnamanagedCounters, CountersDefinition.Builder countersDefinitionBuilder) {
+    private static ImmutableList<String> readAllCounters(Node segment, String realmName, boolean onlyUnamanagedCounters, CountersDefinition.Builder countersDefinitionBuilder) {
         List<String> counters = Lists.newArrayList();
         segment.getRelationships(RelationshipTypes.PROVIDED, Direction.INCOMING).forEach(link -> {
             Node counterNode = link.getStartNode();
-            if (!counterNode.hasProperty("name") || !link.hasProperty("context")) return;
+            if (!counterNode.hasProperty("name")) return;
 
-            String name = counterNode.getProperty("name").toString();
             CounterNode counter = readCounter(counterNode);
             Boolean managed = isManaged(counterNode);
+            String id = counter.name + "@context:" + realmName;
             if (onlyUnamanagedCounters) {
                 if (!managed) {
-                    counters.add(name);
-                    countersDefinitionBuilder.add(counter, managed);
+                    counters.add(id);
+                    countersDefinitionBuilder.add(id, counter, managed);
                 }
             } else {
-                counters.add(name);
-                countersDefinitionBuilder.add(counter, managed);
+                counters.add(id);
+                countersDefinitionBuilder.add(id, counter, managed);
             }
         });
         return ImmutableList.copyOf(counters);

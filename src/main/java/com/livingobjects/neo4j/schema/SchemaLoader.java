@@ -46,6 +46,7 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static com.livingobjects.neo4j.model.iwan.GraphModelConstants.CONTEXT;
 import static com.livingobjects.neo4j.model.iwan.GraphModelConstants.DESCRIPTION;
 import static com.livingobjects.neo4j.model.iwan.GraphModelConstants.ID;
 import static com.livingobjects.neo4j.model.iwan.GraphModelConstants.LINK_PROP_SPECIALIZER;
@@ -169,9 +170,9 @@ public final class SchemaLoader {
             Object existingPath = segmentNode.getProperty(PATH);
 
             if (existingPath.equals(managedRealm.memdexPath.segment)) {
-                return new RealmNode(managedRealm.name, managedRealm.attributes, mergeManagedWithUnmanagedMemdexPath(managedRealm.memdexPath, unmanagedRealm, countersDefinitionBuilder));
+                return new RealmNode(managedRealm.name, managedRealm.attributes, mergeManagedWithUnmanagedMemdexPath(managedRealm.memdexPath, managedRealm.name, unmanagedRealm, countersDefinitionBuilder));
             } else {
-                Optional<MemdexPathNode> previousMemdexPath = SchemaReader.readMemdexPath(segmentNode, true, CountersDefinition.builder());
+                Optional<MemdexPathNode> previousMemdexPath = SchemaReader.readMemdexPath(segmentNode, managedRealm.name, true, CountersDefinition.builder());
                 if (previousMemdexPath.isPresent()) {
                     throw new IllegalArgumentException(String.format("Realm %s can have only one root level : %s != %s", managedRealm.name, existingPath, managedRealm.memdexPath.segment));
                 } else {
@@ -183,7 +184,7 @@ public final class SchemaLoader {
         }
     }
 
-    private MemdexPathNode mergeManagedWithUnmanagedMemdexPath(MemdexPathNode managedMemdexPath, Node unmanagedRealm, CountersDefinition.Builder countersDefinitionBuilder) {
+    private MemdexPathNode mergeManagedWithUnmanagedMemdexPath(MemdexPathNode managedMemdexPath, String realmName, Node unmanagedRealm, CountersDefinition.Builder countersDefinitionBuilder) {
         List<String> mergedCounters = Lists.newArrayList(managedMemdexPath.counters);
         List<MemdexPathNode> mergedChildren = Lists.newArrayList();
 
@@ -198,9 +199,9 @@ public final class SchemaLoader {
                 if (notFound.remove(path)) {
                     MemdexPathNode managedChild = children.get(path);
                     if (managedChild != null) {
-                        mergedChildren.add(mergeManagedWithUnmanagedMemdexPath(managedChild, segmentNode, countersDefinitionBuilder));
+                        mergedChildren.add(mergeManagedWithUnmanagedMemdexPath(managedChild, realmName, segmentNode, countersDefinitionBuilder));
                     } else {
-                        SchemaReader.readMemdexPath(segmentNode, true, countersDefinitionBuilder)
+                        SchemaReader.readMemdexPath(segmentNode, realmName, true, countersDefinitionBuilder)
                                 .ifPresent(mergedChildren::add);
                     }
                 }
@@ -694,7 +695,7 @@ public final class SchemaLoader {
             }
         }
 
-        UniqueEntity<Node> counterEntity = counterNodeFactory.getOrCreateWithOutcome(NAME, counter.name);
+        UniqueEntity<Node> counterEntity = counterNodeFactory.getOrCreateWithOutcome(NAME, counter.name, CONTEXT, realmTemplate);
         if (counterEntity.wasCreated) {
             modified = true;
             counterEntity.entity.setProperty(_TYPE, "counter");
@@ -744,7 +745,7 @@ public final class SchemaLoader {
             if (counterNode == null) {
                 throw new IllegalArgumentException(String.format("Counter with reference '%s' is not found in provided schema.", counter));
             }
-            UniqueEntity<Node> counterNodeEntity = counterNodeFactory.getOrCreateWithOutcome(NAME, counterNode.name);
+            UniqueEntity<Node> counterNodeEntity = counterNodeFactory.getOrCreateWithOutcome(NAME, counterNode.name, CONTEXT, realmTemplate);
             counterNodeEntity.entity.setProperty("_type", "counter");
             if (managedSchema.counters.isManaged(counter)) {
                 counterNodeEntity.entity.setProperty(MANAGED, true);
