@@ -38,6 +38,7 @@ import com.livingobjects.neo4j.model.iwan.GraphModelConstants;
 import com.livingobjects.neo4j.model.iwan.Labels;
 import com.livingobjects.neo4j.model.iwan.RelationshipTypes;
 import com.livingobjects.neo4j.model.result.Neo4jErrorResult;
+import org.neo4j.dbms.api.DatabaseManagementService;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
@@ -102,8 +103,8 @@ public final class ExportExtension {
     private final TemplatedPlanetFactory templatedPlanetFactory;
     private final PlanetFactory planetFactory;
 
-    public ExportExtension(@Context GraphDatabaseService graphDb) {
-        this.graphDb = graphDb;
+    public ExportExtension(@Context DatabaseManagementService dbms) {
+        this.graphDb = dbms.database(dbms.listDatabases().get(0));
         try (Transaction tx = graphDb.beginTx()) {
             this.metaSchema = new MetaSchema(tx);
             this.templatedPlanetFactory = new TemplatedPlanetFactory(graphDb);
@@ -751,7 +752,7 @@ public final class ExportExtension {
                             }
                             return possibleScopes.stream()
                                     .flatMap(scope -> planetByContext.allPlanets().stream()
-                                            .map(planetTemplate -> planetFactory.get(planetTemplate, scope))
+                                            .map(planetTemplate -> planetFactory.get(planetTemplate, scope, tx))
                                             .filter(Objects::nonNull));
                         }).collect(Collectors.toList());
                 return authorizedPlanets.stream()
@@ -763,7 +764,7 @@ public final class ExportExtension {
                         .flatMap(scopeId -> {
                             PlanetByContext planetByContext = templatedPlanetFactory.getPlanetByContext(leafAttribute);
                             return planetByContext.allPlanets().stream()
-                                    .map(planetTemplate -> planetFactory.get(planetTemplate, scopeId))
+                                    .map(planetTemplate -> planetFactory.get(planetTemplate, scopeId, tx))
                                     .filter(Objects::nonNull)
                                     .flatMap(planetNode -> StreamSupport.stream(planetNode.getRelationships(INCOMING, ATTRIBUTE).spliterator(), false)
                                             .map(Relationship::getStartNode))
